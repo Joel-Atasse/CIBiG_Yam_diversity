@@ -93,26 +93,22 @@ done
 BFcrop data were merged and trimmed. The quality of Africrop data were checked and then renamed using a list of samples name (rename_fastq.sh)
 
 ```
-awk -F';' -v src="$SRC" -v dest="$DEST" 'NR>1 {
-    # Construire les chemins source et destination
-    src1 = src "/" $2 "_1.fastq.gz"
-    src2 = src "/" $2 "_2.fastq.gz"
-    dest1 = dest "/" $1 "_R1.fastq.gz"
-    dest2 = dest "/" $1 "_R2.fastq.gz"
+#!/bin/bash
 
-    # Vérifier si le fichier source existe avant de copier
-    if (system("[ -f \"" src1 "\" ]") == 0) {
-	print "cp " src1 " " dest1
-    } else {
-	print "# WARNING: " src1 " does not exist"
-    }
+SRC="reads"
+DEST="reads_renamed"
 
-    if (system("[ -f \"" src2 "\" ]") == 0) {
-	print "cp " src2 " " dest2
-    } else {
-	print "# WARNING: " src2 " does not exist"
-    }
-}' "$CSV_FILE" | bash
+awk -F',' 'NR>1 {print $1","$2}' africrop.csv | while IFS=',' read -r newname oldname
+do
+    if [ -f "$SRC/${oldname}_R1.fastq.gz" ]; then
+        cp "$SRC/${oldname}_R1.fastq.gz" "$DEST/${newname}_R1.fastq.gz"
+    fi
+
+    if [ -f "$SRC/${oldname}_R2.fastq.gz" ]; then
+        cp "$SRC/${oldname}_R2.fastq.gz" "$DEST/${newname}_R2.fastq.gz"
+    fi
+done
+
 ```
 
 
@@ -129,6 +125,8 @@ seqkit stats -aT "$RAWDIR/${f}.fq.gz" > "$STATDIR/${f}_stats.tsv"
 
 The output of seqkit stats were exported and analyzed in **r**
 
+
+---
 
 ## 6. Second online meeting: 03-05-2026
 
@@ -295,6 +293,8 @@ cd "$STATDIR"
 - A map showing the distribution of the samples was created.
 
 
+---
+
 ## 8. Third online meeting: 03-13-2026
 
 - Presentation of all was done
@@ -410,8 +410,8 @@ module load singularity/4.0.1
 module load mash/2.3
 module load mashtree/1.4.6
 
-# STEP 1: CREATE MASH SKETCHES FOR READS
-echo "STEP 1: Creating Mash sketches for reads..." | tee -a "$LOGFILE"
+# CREATE MASH SKETCHES FOR READS
+echo "Creating Mash sketches for reads..." | tee -a "$LOGFILE"
 
 for FQ in "${READ_DIR}"/*.fastq.gz
 do
@@ -423,65 +423,58 @@ done
 
 echo "Read sketches completed" | tee -a "$LOGFILE"
 
-# STEP 2: SKETCH REFERENCE GENOME
-echo "STEP 2: Creating Mash sketch for reference genome..." | tee -a "$LOGFILE"
+# SKETCH REFERENCE GENOME
+echo "Creating Mash sketch for reference genome..." | tee -a "$LOGFILE"
 mash sketch -k "$KMER" -s "$SKETCH" -p "$THREADS" -o "${SKETCH_DIR}/reference" "$REF_GENOME"
 echo "Reference genome sketch completed" | tee -a "$LOGFILE"
 
-# STEP 3: COMBINE SKETCHES
-echo "STEP 3: Combining sketches..." | tee -a "$LOGFILE"
+# COMBINE SKETCHES
+echo "Combining sketches..." | tee -a "$LOGFILE"
 mash paste "${SKETCH_DIR}/all.msh" "${SKETCH_DIR}"/*.msh
 echo "Sketch combination completed" | tee -a "$LOGFILE"
 
-# STEP 4: COMPUTE PAIRWISE DISTANCES
-echo "STEP 4: Computing pairwise Mash distances..." | tee -a "$LOGFILE"
+# COMPUTE PAIRWISE DISTANCES
+echo "Computing pairwise Mash distances..." | tee -a "$LOGFILE"
 mash dist "${SKETCH_DIR}/all" "${SKETCH_DIR}/all.msh" \
 	> "${DIST_DIR}/mash_distances.tab"
 echo "Distance calculation completed" | tee -a "$LOGFILE"
 
-# STEP 5: BUILD TRIANGLE MATRIX
+# BUILD TRIANGLE MATRIX
 echo "STEP 5: Building Mash triangle matrix..." | tee -a "$LOGFILE"
 mash triangle "${SKETCH_DIR}/all.msh" > "${DIST_DIR}/mash_triangle.txt"
 echo "Triangle matrix completed" | tee -a "$LOGFILE"
 
-# OPTIONAL: BUILD QUICK TREE
-echo "STEP 6: Building MashTree phylogeny..." | tee -a "$LOGFILE"
-mashtree "${READ_DIR}"/*.fastq.gz "$REF_GENOME" > "${DIST_DIR}/mashtree.nwk"
-```
-
-- Remove the directory path and .fastq.gz extension from mash_distances.tab
-```
-awk '{
-gsub(".*/","",$1); gsub(".fastq.gz","",$1);
-gsub(".*/","",$2); gsub(".fastq.gz","",$2);
-print
-}' mash_distances.tab > mash_distRef1_clean.tab
-```
-
-
-- Remove the directory path and .fastq.gz extension from mash_triangle.txt
-```
-awk '{gsub(".*/","",$1); gsub(".fastq.gz","",$1); print}' mash_triangle.txt > \
-	mash_triangleRef1_clean.txt
 ```
 
 - Downstream analysis in R
 
 	- PCoA
-    - k-means clustering
-    - Neighbor-Joining tree
-    - Mash distance heatmap 
-    - Comparing Mash distance and SNP distance
+    	- k-means clustering
+    	- Neighbor-Joining tree
+    	- Mash distance heatmap 
+    	
 
 
+---
+
+## 11. Firth online meeting 03-19-2026
+
+- Supervisors recommandations:
+
+	- Revise the presentation by removing old genetic diversity tools
+    	- Update downstream analysis in ```Workflow```
+    	- Revise scripts
+    	- Explain Mash approach
 
 
+---
 
-
-
-
-
-
+## Mash run
+- Get error with k-mer size used (11)
+WARNING: For the k-mer size used (11), the random match probability (0.992991) is above the specified 
+warning threshold (0.01) for the sequence "TDr96x99_v1.0.fasta_genomic.fna" of size 594227176. 
+Distances to this sequence may be underestimated as a result. To meet the threshold of 0.01, 
+a k-mer size of at least 18 is required. See: -k, -w.
 
 
 
