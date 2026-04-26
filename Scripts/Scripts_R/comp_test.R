@@ -1,81 +1,93 @@
-# ===============================================
-#       Distance comparison: Mash vs SNPs
-# ===============================================
 
 # Set working directory
-setwd("/media/joel/Lab/CIBiG_2025/stage_yam/R_analysis")
+setwd("CIBiG_2025/stage_yam/R_analysis")
 
 # Create main output directories
 output_dir  <- "Mash_results/comparison"
 dir.create(output_dir, showWarnings = FALSE)
 
-library(reshape2)
+# Load libraries
+library(ggplot2)
 library(vegan)
-library(dendextend)    # tree comparison / tanglegram
-library(ggplot2)       # optional plots
-
-
-# Read sample IDs
-sample_id <- read.table("Input_dir/comparison/sample_id.txt", stringsAsFactors = FALSE)
-
-# Read distance matrices
-pairwise_mat <- as.matrix(read.table("Input_dir/comparison/pairwise_dist.dist"))
-allele_mat   <- as.matrix(read.table("Input_dir/comparison/allele_dist.mdist"))
-ibs_mat      <- as.matrix(read.table("Input_dir/comparison/ibs_dist.mibs"))
-
-
-# Assign names
-rownames(pairwise_mat) <- colnames(pairwise_mat) <- sample_id$V1
-rownames(allele_mat)   <- colnames(allele_mat)   <- sample_id$V1
-rownames(ibs_mat)      <- colnames(ibs_mat)      <- sample_id$V1
-
+library(reshape2)
 
 # Import Mash distances
 mash <- read.table("Input_dir/comparison/mash_dist_clean.tab", header = FALSE)
 colnames(mash) <- c("Query","Ref", "mash_dist", "pvalue", "shared_hashes")
 mash_mat <- acast(mash, Query ~ Ref, value.var = "mash_dist") # Cast to matrix
 
-# Common set of individuals
-common <- Reduce(intersect, list(
-  rownames(mash_mat),
-  rownames(allele_mat),
-  rownames(pairwise_mat),
-  rownames(ibs_mat)
-))
+# Import SNP-based Jaccard distance
+jaccard_mat <- read.csv("Input_dir/comparison/jaccard_distance_matrix.csv", 
+                             row.names = 1, check.names = FALSE)
+rownames(jaccard_mat) <- colnames(jaccard_mat) <- row.names(mash_mat)
 
-# Subset all matrices consistently
-mash_mat       <- mash_mat[common, common]
-allele_mat    <- allele_mat[common, common]
-pairwise_mat  <- pairwise_mat[common, common]
-ibs_mat       <- ibs_mat[common, common]
+# Convert distance matrices to matrices
+mash_mat <- as.matrix(mash_dist)
+snp_mat  <- as.matrix(snp_dist)
 
+# Keep only upper triangle (avoid duplicates)
+upper_idx <- upper.tri(mash_mat)
 
-# Convert to dist objects
+df <- data.frame(
+  Mash = mash_mat[upper_idx],
+  SNP  = jaccard_mat[upper_idx]
+)
+
+# Correlation analyses
+pearson_cor  <- cor(df$Mash, df$SNP, method = "pearson")
+spearman_cor <- cor(df$Mash, df$SNP, method = "spearman")
+
+# Mantel test
 mash_dist      <- as.dist(mash_mat)
-dist_allele    <- as.dist(allele_mat)
-dist_pairwise  <- as.dist(pairwise_mat)
-dist_ibs       <- as.dist(ibs_mat)
+jaccard_dist      <- as.dist(jaccard_mat)
+mantel_res <- mantel(mash_dist, jaccard_dist, method = "pearson", permutations = 999)
 
+# Format labels
+label_text <- paste0(
+  "Pearson r = ", round(pearson_cor, 3), "\n",
+  "Spearman ρ = ", round(spearman_cor, 3), "\n",
+  "Mantel r = ", round(mantel_res$statistic, 3), "\n",
+  "p = ", signif(mantel_res$signif, 3)
+)
 
-# Mantel tests
-mantel_result1 <- mantel(mash_dist, dist_allele, method = "pearson", permutations = 999)
-mantel_result2 <- mantel(mash_dist, dist_pairwise, method = "pearson", permutations = 999)
-mantel_result3 <- mantel(mash_dist, dist_ibs, method = "pearson", permutations = 999)
+label_text1 <- paste0(
+  "Pearson r = ", round(pearson_cor, 3), "\n",
+  "Mantel r = ", round(mantel_res$statistic, 3), "\n",
+  "p = ", signif(mantel_res$signif, 3)
+)
 
+# Plot
+p <- ggplot(df, aes(x = Mash, y = SNP)) +
+  geom_point(color = "steelblue", alpha = 0.7, size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "red", fill = "grey80") +
+  annotate(
+    "text",
+    x = max(df$Mash)*0.8,
+    y = max(df$SNP)*0.6,
+    label = label_text1,
+    hjust = 0,
+    size = 5
+  ) +
+  labs(
+    title = "Correlation between Mash Distance and SNP-based Distance",
+    x = "Mash Distance",
+    y = "SNP-based Distance"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid.minor = element_blank()
+  )
 
-print(mantel_result1)
-print(mantel_result2)
-print(mantel_result3)
+# Show plot
+print(p)
 
+# Export (Save plots as PDF or PNG)
+# ---------------------------------
+ggsave(paste0(output_dir, "/Mash_vs_SNP_correlation_a.pdf"),
+             plot = p, width = 10, height = 6, dpi = 300)
 
-mantel_result1b <- mantel(mash_dist, dist_allele, 
-                         method = "spearman", permutations = 999)
-mantel_result2b <- mantel(mash_dist, dist_pairwise, 
-                         method = "spearman", permutations = 999)
-mantel_result3b <- mantel(mash_dist, dist_ibs, 
-                         method = "spearman", permutations = 999)
+ggsave(paste0(output_dir, "/Mash_vs_SNP_correlation_a.png"), 
+       plot = p, width = 8, height = 6, dpi = 300)
 
-print(mantel_result1b)
-print(mantel_result2b)
-print(mantel_result3b)
 
