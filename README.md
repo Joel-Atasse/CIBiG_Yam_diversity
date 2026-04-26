@@ -3,6 +3,7 @@ This Git repository contains scripts, datasets, and analysis workflows used to i
 
 The directory structure (generated with the tree command) is shown below:
 
+```
 .
 ├── Data
 │   ├── Africrop
@@ -58,4 +59,4 @@ The directory structure (generated with the tree command) is shown below:
 │   ├── logs
 │   └── Web_all
 └── Scripts
-
+```
